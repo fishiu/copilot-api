@@ -1,3 +1,8 @@
+import {
+  preparePlaintextV2,
+  restorePlaintextV2Response,
+  restorePlaintextV2Chunk,
+} from "~/lib/plaintext-v2"
 import type { Context } from "hono"
 
 import { streamSSE } from "hono/streaming"
@@ -65,7 +70,7 @@ export const responsesHandlerDependencies = {
 }
 
 export const handleResponses = async (c: Context) => {
-  const payload = await c.req.json<ResponsesPayload>()
+  let payload = await c.req.json<ResponsesPayload>()
   setPluginRequestModel(payload.model)
   const requestedModel = payload.model
   payload.model = responsesHandlerDependencies.resolveMappedModel(payload.model)
@@ -173,6 +178,16 @@ export const handleResponses = async (c: Context) => {
     model: payload.model,
   })
 
+  const plaintextV2 = preparePlaintextV2(
+    payload,
+    process.env.CAPI_PLAINTEXT_V2_MODELS,
+  )
+  if (plaintextV2.error)
+    return c.json(
+      { error: { type: "invalid_request_error", message: plaintextV2.error } },
+      400,
+    )
+  payload = plaintextV2.payload
   const normalizedAgentMessageCount = normalizeGuardianAgentMessages(payload)
   if (normalizedAgentMessageCount > 0) {
     logger.debug(
@@ -249,9 +264,13 @@ export const handleResponses = async (c: Context) => {
       const iterator = response[Symbol.asyncIterator]()
 
       try {
-        for await (const chunk of {
+        for await (const originalChunk of {
           [Symbol.asyncIterator]: () => iterator,
         }) {
+          const chunk = restorePlaintextV2Chunk(
+            originalChunk,
+            plaintextV2.active,
+          )
           debugJson(logger, "Responses stream chunk:", chunk)
           const parsedEvent = parseResponsesStreamEvent(chunk)
           recordResponsesFirstToken(parsedEvent)
@@ -291,7 +310,10 @@ export const handleResponses = async (c: Context) => {
     value: response,
     tailLength: 400,
   })
-  const result = response as ResponsesResult
+  const result = restorePlaintextV2Response(
+    response,
+    plaintextV2.active,
+  ) as ResponsesResult
   recordUsage({
     ...normalizeResponsesUsage(result.usage),
     total_nano_aiu: normalizeOptionalToken(
