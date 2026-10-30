@@ -1,3 +1,4 @@
+import { forwardLocalAlphaSearch } from "~/lib/plaintext-v2-alpha-forward"
 import { Hono, type Context } from "hono"
 import consola from "consola"
 
@@ -151,6 +152,8 @@ export async function handleAlphaSearchRequest(
   c: Context,
   resolvedProviderConfig?: ResolvedProviderConfig,
 ): Promise<Response> {
+  const localForward = await forwardLocalAlphaSearch(c.req.raw)
+  if (localForward) return localForward
   if (resolvedProviderConfig) {
     return await handleCodexRequest(c, c.req.raw, resolvedProviderConfig)
   }

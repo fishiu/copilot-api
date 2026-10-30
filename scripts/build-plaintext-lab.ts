@@ -7,11 +7,14 @@ if (!source || !target || resolve(source) === resolve(target))
 await mkdir(target, { recursive: true })
 await cp(source, target, { recursive: true })
 const result = await Bun.build({
-  entrypoints: ["src/lib/plaintext-v2.ts"],
+  entrypoints: [
+    "src/lib/plaintext-v2.ts",
+    "src/lib/plaintext-v2-alpha-forward.ts",
+  ],
   target: "bun",
   format: "esm",
   outdir: `${target}/dist`,
-  naming: "plaintext-v2.js",
+  naming: "[name].js",
 })
 if (!result.success)
   throw new AggregateError(result.logs, "Plaintext V2 helper build failed")
@@ -41,6 +44,13 @@ replaceOnce(
   "\tconst result = response;\n\trecordUsage({",
   "\tconst result = restorePlaintextV2Response(response, plaintextV2.active);\n\trecordUsage({",
 )
+replaceOnce(
+  "async function handleAlphaSearchRequest(c, resolvedProviderConfig) {",
+  "async function handleAlphaSearchRequest(c, resolvedProviderConfig) {\n const localForward = await forwardLocalAlphaSearch(c.req.raw);\n if (localForward) return localForward;",
+)
+text =
+  'import { forwardLocalAlphaSearch } from "./plaintext-v2-alpha-forward.js";\n'
+  + text
 await writeFile(path, text)
 console.log(
   JSON.stringify({
