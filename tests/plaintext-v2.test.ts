@@ -127,11 +127,12 @@ describe("opt-in plaintext V2", () => {
         { type: "response.completed", response: { output: [c] } },
         true,
       )
-      expect(r.response.output[0]).toEqual({
+      const expected = {
         ...c,
         namespace: "collaboration",
         encrypted_function_args: [],
-      })
+      }
+      expect(r.response.output[0]).toEqual(expected)
       expect(c.namespace).toBe(alias)
     }
   })

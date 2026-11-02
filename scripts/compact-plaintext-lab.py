@@ -1,6 +1,6 @@
 """Resume the original isolated audit, remotely compact, then wake original workers."""
 import pathlib,json,subprocess,os,queue,threading,time
-base=pathlib.Path.home()/'.local/share/capi-v2-plaintext-test';home=pathlib.Path.home()/'.codex-v2-test';state=json.loads((base/'acceptance.json').read_text());sid=state['initial']['threads'][0];q=queue.Queue();events=[];seq=0;receipt={};err=(base/'compact.stderr').open('w');p=subprocess.Popen(['/Users/leverest/.local/bin/codex','app-server','--stdio'],cwd=base/'work',env={**os.environ,'CODEX_HOME':str(home)},stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=err,text=True)
+base=pathlib.Path(os.environ.get('CAPI_LAB_BASE',str(pathlib.Path.home()/'.local/share/capi-v2-plaintext-test')));home=pathlib.Path(os.environ.get('CODEX_LAB_HOME',str(pathlib.Path.home()/'.codex-v2-test')));state=json.loads((base/'acceptance.json').read_text());sid=state['initial']['threads'][0];q=queue.Queue();events=[];seq=0;receipt={};err=(base/'compact.stderr').open('w');p=subprocess.Popen([os.environ.get('CODEX_LAB_EXECUTABLE','codex'),'app-server','--stdio'],cwd=base/'work',env={**os.environ,'CODEX_HOME':str(home)},stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=err,text=True)
 def reader():
  for l in p.stdout:
   try:q.put(json.loads(l))

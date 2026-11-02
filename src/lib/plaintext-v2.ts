@@ -1,4 +1,4 @@
-/** Experimental, opt-in adapter for NEW Copilot V2 histories only. */
+/** Opt-in adapter for NEW Copilot V2 histories; old ciphertext stays fail-closed. */
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json }
 type Obj = { [key: string]: Json }
 export const PLAINTEXT_V2_ALIAS = "capi_plaintext_v2"

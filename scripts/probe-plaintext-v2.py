@@ -1,12 +1,16 @@
 """Synthetic native-Codex acceptance against the private CAPI instance."""
 import csv, json, os, pathlib, random, subprocess, time, uuid, sys
-BASE=pathlib.Path.home()/'.local/share/capi-v2-plaintext-test'
-HOME=pathlib.Path.home()/'.codex-v2-test'
+BASE=pathlib.Path(os.environ.get('CAPI_LAB_BASE', str(pathlib.Path.home()/'.local/share/capi-v2-plaintext-test')))
+HOME=pathlib.Path(os.environ.get('CODEX_LAB_HOME', str(pathlib.Path.home()/'.codex-v2-test')))
+PORT=int(os.environ.get('CAPI_LAB_PORT', '4143'))
+if PORT in (4141,4142):raise SystemExit('Refusing production gateway ports for lab acceptance')
+KEY_HELPER=pathlib.Path(os.environ.get('CAPI_KEY_HELPER', str(pathlib.Path.home()/'repos/dotconfig-general/shared/capi/get-gateway-key.sh')))
+CODEX=os.environ.get('CODEX_LAB_EXECUTABLE', 'codex')
 WORK=BASE/'work'
 HOME.mkdir(mode=0o700,exist_ok=True);WORK.mkdir(mode=0o700,exist_ok=True)
 if (BASE/'acceptance.json').exists():raise SystemExit('Existing results: inspect before repeating')
 catalog=json.loads((pathlib.Path.home()/'.codex/copilot-models.json').read_text())
-for m in catalog['models']:m['multi_agent_version']='v2'
+for m in catalog['models']:m['multi_agent_version']='v2' if m['slug'] in ('gpt-6-astra','gpt-6.1-sol') else 'v1'
 (HOME/'catalog.json').write_text(json.dumps(catalog))
 (HOME/'config.toml').write_text(f'''model="gpt-6.1-sol"
 model_provider="plaintext_lab"
@@ -26,7 +30,7 @@ expose_spawn_agent_model_overrides=true
 max_concurrent_threads_per_session=4
 [model_providers.plaintext_lab]
 name="OpenAI"
-base_url="http://127.0.0.1:60444"
+base_url="http://127.0.0.1:{PORT}"
 wire_api="responses"
 supports_websockets=false
 request_max_retries=0
@@ -35,7 +39,7 @@ stream_idle_timeout_ms=90000
 capabilities={{ remote_compaction="v2" }}
 [model_providers.plaintext_lab.auth]
 command="/bin/bash"
-args=["/Users/leverest/repos/dotconfig/shared/capi/get-gateway-key.sh","{BASE/'data'}"]
+args=["{KEY_HELPER}","{BASE/'data'}"]
 timeout_ms=5000
 refresh_interval_ms=300000
 ''')
@@ -48,7 +52,7 @@ for task in ['audit_a','audit_b']:
  valid=[r for r in rows if r['status']=='paid' and not r['flag']];expect[task]={'count':len(valid),'sum_cents':sum(r['cents']for r in valid),'flagged_paid':sum(r['status']=='paid' and bool(r['flag'])for r in rows)}
 state={'expected':expect,'markers':secret,'home':str(HOME),'work':str(WORK)}
 def invoke(label,prompt,sid=None):
- cmd=['/Users/leverest/.local/bin/codex','exec']
+ cmd=[CODEX,'exec']
  if sid:cmd+=['resume']
  cmd+=['--json','--skip-git-repo-check']
  if sid:cmd+=[sid]
