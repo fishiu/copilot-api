@@ -1,5 +1,13 @@
 # Repository Guidelines
 
+## Maintained Fork
+
+- This fork is maintained at `fishiu/copilot-api`; fetch and merge the original `caozhiyuan/copilot-api` through `upstream`. Preserve existing remotes and unrelated worktrees.
+- Develop on `fishiu/plaintext-v2-upstream`, inspect and merge current upstream changes regularly, and record the exact upstream commit plus checks in `docs/fork-maintenance.md`. Do not replace the fork with a destructive mirror or force push.
+- `fishiu/plaintext-v2` is the separately accepted deployment line. A successful merge, source build or unit test does not authorize upgrading a running gateway; retain its accepted commit until the relevant runtime capabilities pass.
+- Preserve the opt-in plaintext adapter, rejection of historical opaque agent messages, native search and paused 4143 lab while merging upstream. Read `docs/fork-maintenance.md` before deployment or protocol changes.
+- Do not create an upstream pull request until the owner explicitly requests one.
+
 ## Project Layout
 
 - `src/`: Bun/TypeScript API gateway; `routes/` handles HTTP endpoints, `services/` integrates providers, `lib/` holds shared logic, and `lib/types/` defines OpenAI Chat Completions, OpenAI Responses, and Anthropic Messages contracts.
