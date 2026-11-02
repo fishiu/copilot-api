@@ -1,10 +1,12 @@
 import type { Context } from "hono"
 
+import { GITHUB_COPILOT_PROVIDER } from "~/lib/github-copilot-provider"
 import {
   InvalidMultipartBodyError,
   MultipartBodyTooLargeError,
   stageMultipartBodyToDisk,
 } from "~/routes/images/temp-form-data"
+import type { CodexImagesOperation } from "~/services/codex/images"
 import {
   translateXaiImageEditJson,
   XaiImagesRequestError,
@@ -13,6 +15,45 @@ import {
 export const multipartEditDependencies = { stageMultipartBodyToDisk }
 
 class ImageEditRequestError extends Error {}
+
+/** Share edit validation and staged-upload cleanup across both route families. */
+export async function withImageEditRequest(
+  c: Context,
+  operation: CodexImagesOperation,
+  handle: (
+    multipart: Awaited<ReturnType<typeof parseMultipartImageEdit>>,
+  ) => Promise<Response>,
+): Promise<Response> {
+  if (operation !== "edits") return await handle(null)
+
+  const mediaType = c.req
+    .header("content-type")
+    ?.split(";", 1)[0]
+    ?.trim()
+    .toLowerCase()
+  if (mediaType !== "application/json" && mediaType !== "multipart/form-data") {
+    return c.json(
+      {
+        error: {
+          message:
+            "Image edits require application/json or multipart/form-data",
+          type: "invalid_request_error",
+        },
+      },
+      415,
+    )
+  }
+
+  const multipart = await parseMultipartImageEdit(c.req.raw)
+  try {
+    return await handle(multipart)
+  } catch (error) {
+    await multipart?.cleanup()
+    throw error
+  } finally {
+    multipart?.scheduleCleanup()
+  }
+}
 
 export function imageEditRequestErrorResponse(
   c: Context,
@@ -159,7 +200,11 @@ export async function parseMultipartImageEdit(request: Request) {
       const headers = new Headers(requestHeaders)
       headers.delete("content-length")
       let body: FormData | Uint8Array
-      if (provider === "codex" || provider === "xai") {
+      if (
+        provider === "codex"
+        || provider === "xai"
+        || provider === GITHUB_COPILOT_PROVIDER
+      ) {
         const payload = {
           ...(await readPayload()),
           ...(model === undefined ? {} : { model }),

@@ -491,7 +491,7 @@ const zh: Locale = {
       general: '请求设置',
       mappings: '模型映射',
       models: '模型规则',
-      search: '搜索与图片',
+      search: '搜索',
       transport: '上游传输',
     },
     fields: {
@@ -506,6 +506,11 @@ const zh: Locale = {
       opencodeModelContextWindow: {
         label: 'OpenCode 上下文上限',
         description: '限制 OpenCode 模型目录展示的上下文 Token 数。',
+      },
+      codexMultiAgentV1: {
+        label: 'Codex 多 Agent V1',
+        description:
+          '上游不支持加密多 Agent 消息时使用 V1，默认 V2。请在新的 Codex 会话中测试；CLI 显式 feature 配置可能优先。',
       },
       claudeTokenMultiplier: {
         label: 'Claude Token 估算系数',
@@ -551,14 +556,6 @@ const zh: Locale = {
       messageApiWebSearchModel: {
         label: 'Messages 网页搜索模型',
         description: '供只包含服务端 web_search 工具的请求使用；空字符串禁用。',
-      },
-      imageGenerationModel: {
-        label: '图片生成模型',
-        description: '留空沿用原有路由；指定时使用 xai/model。',
-      },
-      imageEditModel: {
-        label: '图片编辑模型',
-        description: '留空沿用原有路由；指定时使用 xai/model。',
       },
       headersTimeoutMs: {
         label: '等待响应头超时',
