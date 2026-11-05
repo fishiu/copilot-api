@@ -154,6 +154,26 @@ describe("Codex browser authorization", () => {
     await close()
   })
 
+  test("preserves an explicit ten-minute deadline and releases the listener on timeout", async () => {
+    const timer = spyOn(globalThis, "setTimeout")
+    const prompt = mock(() => Promise.resolve(""))
+    const { outcome } = await startLogin({
+      onPrompt: prompt,
+      callbackTimeoutMs: 600_000,
+    })
+    await callback("/wrong-route")
+    const timeout = timer.mock.calls.find(([, delay]) => delay === 600_000)
+    expect(timeout?.[1]).toBe(600_000)
+    timeout?.[0](undefined)
+    expect(((await outcome) as Error).message).toBe(
+      "Codex authorization timed out after 2 minutes",
+    )
+    expect(prompt).toHaveBeenCalledTimes(1)
+    expect(exchange).not.toHaveBeenCalled()
+    const close = await occupyCallbackPort()
+    await close()
+  })
+
   test("rejects an already cancelled login before publishing a URL", async () => {
     const controller = new AbortController()
     controller.abort(new Error("Cancelled before starting"))

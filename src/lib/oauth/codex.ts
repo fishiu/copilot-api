@@ -45,6 +45,7 @@ export interface LoginCodexOptions {
   onPrompt: (message: string) => Promise<string>
   onProgress?: (message: string) => void
   signal?: AbortSignal
+  callbackTimeoutMs?: number
 }
 
 export class CodexOAuthError extends Error {
@@ -352,6 +353,7 @@ async function createAuthorizationFlow(): Promise<{
 async function waitForAuthorizationCode(
   state: string,
   signal?: AbortSignal,
+  callbackTimeoutMs = CALLBACK_TIMEOUT_MS,
 ): Promise<string> {
   signal?.throwIfAborted()
   let resolveCode: ((code: string | null) => void) | undefined
@@ -418,7 +420,7 @@ async function waitForAuthorizationCode(
   signal?.addEventListener("abort", onAbort, { once: true })
   try {
     signal?.throwIfAborted()
-    timeout = setTimeout(() => resolveCode?.(null), CALLBACK_TIMEOUT_MS)
+    timeout = setTimeout(() => resolveCode?.(null), callbackTimeoutMs)
     const code = await waitForCode
     signal?.throwIfAborted()
     if (!code) throw new CodexOAuthError("callback_timeout")
@@ -455,7 +457,11 @@ export async function loginCodex(
   let code: string | null = null
   let callbackError: CodexOAuthError | undefined
   try {
-    code = await waitForAuthorizationCode(state, options.signal)
+    code = await waitForAuthorizationCode(
+      state,
+      options.signal,
+      options.callbackTimeoutMs,
+    )
   } catch (error) {
     options.signal?.throwIfAborted()
     if (!(error instanceof CodexOAuthError)) throw error
