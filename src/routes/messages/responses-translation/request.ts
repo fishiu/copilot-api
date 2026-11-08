@@ -94,8 +94,7 @@ export const translateAnthropicMessagesToResponsesPayload = (
     toolSearchEnabled,
   )
 
-  // Remove safetyIdentifier to align with vscode copilot
-  const promptCacheKey = getPromptCacheKey(payload)
+  const promptCacheKey = getPromptCacheKey()
 
   const responsesPayload: ResponsesPayload = {
     model: payload.model,
@@ -170,10 +169,14 @@ export const translateSystemMessage = (
   message: AnthropicSystemMessage,
 ): Array<ResponseInputItem> => {
   if (typeof message.content === "string") {
-    return [createMessage("developer", message.content)]
+    return message.content.length > 0 ?
+        [createMessage("developer", message.content)]
+      : []
   }
 
-  const content = message.content.map((block) => createTextContent(block.text))
+  const content = message.content
+    .filter((block) => block.type === "text" && block.text.length > 0)
+    .map((block) => createTextContent(block.text))
   return content.length > 0 ? [createMessage("developer", content)] : []
 }
 

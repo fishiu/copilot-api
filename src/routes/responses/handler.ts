@@ -34,7 +34,6 @@ import {
   getUUID,
   isAsyncIterable,
 } from "~/lib/utils"
-import type { SubagentMarker } from "~/lib/subagent"
 import type {
   ResponsesPayload,
   ResponsesResult,
@@ -47,6 +46,7 @@ import { handleResponsesViaMessages } from "./messages-handler"
 import { createStreamIdTracker, fixStreamIds } from "./stream-id-sync"
 import { getCodexTaskTitleModel } from "./task-title"
 import {
+  applyDefaultReasoningSummary,
   applyResponsesApiContextManagement,
   compactInputByLatestCompaction,
   filterReasoningForTransport,
@@ -107,12 +107,9 @@ export const handleResponses = async (c: Context) => {
   const rootSessionId = store?.rootSessionId
   const sessionAffinity = store?.sessionAffinity
 
-  const subagentMarker = getCodexResponsesSubagentMarker(c, {
-    rootSessionId,
-    sessionAffinity,
-  })
+  const subagentMarker = store?.subagent ?? null
   if (subagentMarker) {
-    debugJson(logger, "Detected Codex subagent headers:", subagentMarker)
+    debugJson(logger, "Detected subagent session:", subagentMarker)
   }
 
   const sessionId = rootSessionId ? getUUID(rootSessionId) : undefined
@@ -171,6 +168,7 @@ export const handleResponses = async (c: Context) => {
   }
 
   filterReasoningForTransport(payload, false)
+  applyDefaultReasoningSummary(payload)
 
   const recordUsage = createCopilotTokenUsageRecorder({
     endpoint: "responses",
@@ -427,37 +425,4 @@ const fillEmptyNamespaceDescriptions = (tools: unknown): void => {
       namespaceTool.description = namespaceTool.name
     }
   }
-}
-
-const codexSubagentHeaderValues = new Set([
-  "collab_spawn",
-  "compact",
-  "memory_consolidation",
-  "review",
-])
-
-const getCodexResponsesSubagentMarker = (
-  c: Context,
-  session: { rootSessionId?: string; sessionAffinity?: string },
-): SubagentMarker | null => {
-  const agentType = getTrimmedHeader(c, "x-openai-subagent")
-  if (!agentType || !codexSubagentHeaderValues.has(agentType)) {
-    return null
-  }
-
-  const { rootSessionId, sessionAffinity } = session
-  if (!sessionAffinity) {
-    return null
-  }
-
-  return {
-    agent_id: sessionAffinity,
-    agent_type: agentType,
-    session_id: rootSessionId ?? sessionAffinity,
-  }
-}
-
-const getTrimmedHeader = (c: Context, name: string): string | undefined => {
-  const value = c.req.header(name)?.trim()
-  return value || undefined
 }
