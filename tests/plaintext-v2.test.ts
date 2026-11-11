@@ -1,4 +1,10 @@
 import { describe, expect, test } from "bun:test"
+import { readResponsesStreamEvent } from "~/lib/responses-stream-event"
+import {
+  createCopilotResponsesSseMessage,
+  createStreamIdTracker,
+} from "~/routes/responses/stream-id-sync"
+import { createResponsesWebSocketStreamChunk } from "~/services/copilot/create-responses"
 import {
   preparePlaintextV2,
   restorePlaintextV2Response,
@@ -176,4 +182,36 @@ describe("opt-in plaintext V2", () => {
       expect(restorePlaintextV2Chunk(v, true)).toBe(v)
     }
   })
+  test.each([
+    "response.output_item.added",
+    "response.output_item.done",
+    "response.completed",
+  ])(
+    "restores both cached and serialized websocket events without mutating upstream (%s)",
+    (type) => {
+      const event =
+        type === "response.completed" ?
+          { type, response: { id: "resp-1", output: [call()] } }
+        : { type, output_index: 0, item: { id: "call-1", ...call() } }
+      const original = createResponsesWebSocketStreamChunk(
+        ` ${JSON.stringify(event)} `,
+      )
+      const upstream = readResponsesStreamEvent(original)
+      const restored = restorePlaintextV2Chunk(original, true)
+      const decoded = readResponsesStreamEvent(restored)
+      expect(JSON.stringify(decoded)).toBe(restored.data ?? "")
+      expect(JSON.stringify(decoded)).not.toContain(alias)
+      expect(JSON.stringify(decoded)).toContain('"encrypted_function_args":[]')
+      const downstream = createCopilotResponsesSseMessage(
+        restored,
+        decoded,
+        createStreamIdTracker(),
+      )
+      expect(downstream.data).not.toContain(alias)
+      expect(downstream.data).toContain('"namespace":"collaboration"')
+      expect(readResponsesStreamEvent(original)).toBe(upstream)
+      expect(JSON.stringify(upstream)).toContain(alias)
+      expect(original.data).toContain(alias)
+    },
+  )
 })

@@ -1,4 +1,7 @@
 /** Opt-in adapter for NEW Copilot V2 histories; old ciphertext stays fail-closed. */
+import { decodedResponsesEvent } from "~/lib/responses-stream-event"
+import type { ResponseStreamEvent } from "~/lib/types/responses"
+
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json }
 type Obj = { [key: string]: Json }
 export const PLAINTEXT_V2_ALIAS = "capi_plaintext_v2"
@@ -186,12 +189,14 @@ export function restorePlaintextV2Chunk<T>(chunk: T, active: boolean): T {
     !active
     || !object(chunk)
     || typeof chunk.data !== "string"
-    || !chunk.data.startsWith("{")
+    || !chunk.data.trimStart().startsWith("{")
   )
     return chunk
-  const event: unknown = JSON.parse(chunk.data)
+  const event = JSON.parse(chunk.data) as ResponseStreamEvent
+  const restored = restorePlaintextV2Response(event, true)
   return {
     ...chunk,
-    data: JSON.stringify(restorePlaintextV2Response(event, true)),
+    data: JSON.stringify(restored),
+    [decodedResponsesEvent]: restored,
   }
 }
