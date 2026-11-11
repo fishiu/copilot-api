@@ -98,7 +98,6 @@ export function prepareResponsesContinuation<T extends ResponsesPayload>(
   clientSignal?: AbortSignal,
 ) {
   const previous = states.get(connection)
-  states.delete(connection)
   const { input, previous_response_id: explicitPrevious } = payload
   const eligible =
     Array.isArray(input)
@@ -128,6 +127,8 @@ export function prepareResponsesContinuation<T extends ResponsesPayload>(
     : payload
   // Track only opaque anchors and item roles, never output text.
   const outputItems = new Map<number, OutputMarker>()
+  let candidate: ContinuationState | undefined
+  let interruptedTerminal = false
   const markOutput = (item: ContinuationItem): OutputMarker => ({
     anchor: getAnchor(item),
     assistant: isAssistantItem(item),
@@ -140,20 +141,35 @@ export function prepareResponsesContinuation<T extends ResponsesPayload>(
       if (event.type === "response.output_item.done") {
         outputItems.set(event.output_index, markOutput(event.item))
       }
-      if (event.type !== "response.completed") return
+      if (
+        event.type !== "response.completed"
+        && event.type !== "response.incomplete"
+      )
+        return
+      const interrupted =
+        event.type === "response.incomplete"
+        && event.response?.status === "incomplete"
+        && event.response.incomplete_details?.reason === "interrupted"
+      const completed =
+        event.type === "response.completed"
+        && event.response?.status === "completed"
+        && !clientSignal?.aborted
+      // An interrupted turn advances server history too. Never retry its parent
+      // if this response lacks an anchor that the client can replay.
+      if (interrupted) states.delete(connection)
       if (
         !eligible
         || connection.closed
-        || clientSignal?.aborted
-        || event.response?.status !== "completed"
+        || (!completed && !interrupted)
         || !event.response.id
       )
         return
 
+      interruptedTerminal = interrupted
       if (!Array.isArray(event.response.output) && outputItems.size === 0)
         return
       // Clients replay item.done, whose opaque signature can differ from the
-      // completed response. Completed output only fills missing item markers.
+      // terminal response. Terminal output only fills missing item markers.
       for (const [index, item] of (event.response.output ?? []).entries()) {
         if (!outputItems.has(index)) outputItems.set(index, markOutput(item))
       }
@@ -165,14 +181,19 @@ export function prepareResponsesContinuation<T extends ResponsesPayload>(
         else if (!item.assistant) anchor = undefined
       }
       if (anchor)
-        states.set(connection, {
+        candidate = {
           responseId: event.response.id,
           anchor,
           compactionHash,
-        })
+        }
     },
     finish(): void {
-      if (clientSignal?.aborted) states.delete(connection)
+      if (
+        candidate
+        && !connection.closed
+        && (interruptedTerminal || !clientSignal?.aborted)
+      )
+        states.set(connection, candidate)
     },
   }
 }

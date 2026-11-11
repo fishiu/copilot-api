@@ -17,6 +17,7 @@ import { findEndpointModel } from "~/lib/models"
 import { resolveConfiguredProviderModelAlias } from "~/lib/provider-resolver"
 import { requestContext } from "~/lib/request-context"
 import { setPluginRequestModel } from "~/lib/request-events"
+import { readResponsesStreamEvent } from "~/lib/responses-stream-event"
 import { writeSSEIfConnected } from "~/lib/sse"
 import { isCodexUserAgent } from "~/routes/models/codex-models"
 import {
@@ -32,18 +33,21 @@ import {
 import {
   generateRequestIdFromPayload,
   getUUID,
-  isAsyncIterable,
+  isResponsesStream,
 } from "~/lib/utils"
 import type {
   ResponsesPayload,
   ResponsesResult,
   ResponsesTransport,
-  ResponseStreamEvent,
 } from "~/lib/types/responses"
 import { createResponses as createCopilotResponses } from "~/services/copilot/create-responses"
 
 import { handleResponsesViaMessages } from "./messages-handler"
-import { createStreamIdTracker, fixStreamIds } from "./stream-id-sync"
+import { createResponsesStreamTerminalTracker } from "./stream-failure"
+import {
+  createCopilotResponsesSseMessage,
+  createStreamIdTracker,
+} from "./stream-id-sync"
 import { getCodexTaskTitleModel } from "./task-title"
 import {
   applyDefaultReasoningSummary,
@@ -254,10 +258,11 @@ export const handleResponses = async (c: Context) => {
     transport: responsesTransport,
   })
 
-  if (isStreamingRequested(payload) && isAsyncIterable(response)) {
+  if (isStreamingRequested(payload) && isResponsesStream(response)) {
     logger.debug("Forwarding native Responses stream")
     return streamSSE(c, async (stream) => {
       const idTracker = createStreamIdTracker()
+      const terminalTracker = createResponsesStreamTerminalTracker(publicModel)
       let usage: UsageTokens = {}
       const iterator = response[Symbol.asyncIterator]()
 
@@ -270,7 +275,8 @@ export const handleResponses = async (c: Context) => {
             plaintextV2.active,
           )
           debugJson(logger, "Responses stream chunk:", chunk)
-          const parsedEvent = parseResponsesStreamEvent(chunk)
+          const parsedEvent = readResponsesStreamEvent(chunk)
+          terminalTracker.observe(parsedEvent)
           recordResponsesFirstToken(parsedEvent)
           if (
             parsedEvent?.type === "response.completed"
@@ -285,25 +291,22 @@ export const handleResponses = async (c: Context) => {
             }
           }
 
-          const processedData = fixStreamIds(
-            (chunk as { data?: string }).data ?? "",
-            (chunk as { event?: string }).event,
-            idTracker,
-          )
-
           await writeSSEIfConnected(
             stream,
-            {
-              id: (chunk as { id?: string }).id,
-              event: (chunk as { event?: string }).event,
-              data: processedData,
-            },
+            createCopilotResponsesSseMessage(chunk, parsedEvent, idTracker),
             parsedEvent?.type,
           )
         }
       } finally {
         await iterator.return?.()
         recordUsage(usage)
+
+        const failure = terminalTracker.finalize(idTracker.responseId)
+        if (failure && (await writeSSEIfConnected(stream, failure.sse))) {
+          logger.warn(
+            `Responses stream ended without a terminal event; sent response.failed (${failure.code}: ${failure.message})`,
+          )
+        }
       }
     })
   }
@@ -347,21 +350,6 @@ const shouldFallbackToMessages = (
     supportedEndpoints.includes("/v1/messages")
     || supportedEndpoints.includes("/chat/completions")
   )
-}
-
-const parseResponsesStreamEvent = (
-  chunk: unknown,
-): ResponseStreamEvent | null => {
-  const data = (chunk as { data?: string }).data
-  if (!data || data === "[DONE]") {
-    return null
-  }
-
-  try {
-    return JSON.parse(data) as ResponseStreamEvent
-  } catch {
-    return null
-  }
 }
 
 const removeWebSearchTool = (payload: ResponsesPayload): void => {

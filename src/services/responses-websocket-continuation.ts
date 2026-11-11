@@ -2,6 +2,10 @@ import consola from "consola"
 
 import { createHandlerLogger, debugJson } from "~/lib/logger"
 import { prepareResponsesContinuation } from "~/lib/responses-continuation"
+import {
+  readResponsesStreamEvent,
+  type ResponsesStreamChunk,
+} from "~/lib/responses-stream-event"
 import type {
   ResponsesPayload,
   ResponseStreamEvent,
@@ -16,14 +20,9 @@ let logger: ReturnType<typeof createHandlerLogger> | undefined
 const getLogger = () =>
   (logger ??= createHandlerLogger("responses-websocket-continuation"))
 
-interface StreamChunk {
-  data?: string
-  event?: string
-}
-
 export async function* createContinuableResponsesWebSocketStream<
   TPayload extends ResponsesPayload,
-  TChunk extends StreamChunk,
+  TChunk extends ResponsesStreamChunk,
 >(
   request: PooledWebSocketRequest<TPayload>,
   options: PooledWebSocketStreamOptions<TChunk>,
@@ -65,28 +64,33 @@ export async function* createContinuableResponsesWebSocketStream<
       options,
     )
 
-    try {
-      for await (const chunk of source) {
-        const event = parseEvent(chunk)
-        if (
-          attempt?.usedPrevious
-          && !responseStarted
-          && !forceFull
-          && isPreviousResponseMiss(event)
-          && !clientSignal?.aborted
-        ) {
-          retry = true
-          consola.debug(
-            "Responses websocket continuation unavailable; retrying full input",
-          )
-          break
-        }
-        if (event) attempt?.observe(event)
-        if (event?.type.startsWith("response.")) responseStarted = true
-        yield chunk
+    for await (const chunk of source) {
+      const event = parseEvent(chunk)
+      if (
+        attempt?.usedPrevious
+        && !responseStarted
+        && !forceFull
+        && isPreviousResponseMiss(event)
+        && !clientSignal?.aborted
+      ) {
+        retry = true
+        consola.debug(
+          "Responses websocket continuation unavailable; retrying full input",
+        )
+        break
       }
-    } finally {
-      attempt?.finish()
+      if (event) attempt?.observe(event)
+      if (event?.type.startsWith("response.")) responseStarted = true
+      try {
+        yield chunk
+      } finally {
+        // Commit terminal checkpoints while the pool still holds the socket.
+        if (
+          event?.type === "response.completed"
+          || event?.type === "response.incomplete"
+        )
+          attempt?.finish()
+      }
     }
     if (!retry) return
     forceFull = true
@@ -102,18 +106,10 @@ function logOutgoingContinuationPayload(payload: ResponsesPayload): void {
   getLogger().debug("full payload")
 }
 
-function parseEvent(chunk: StreamChunk): ResponseStreamEvent | null {
-  if (!chunk.data || chunk.data === "[DONE]") return null
+function parseEvent(chunk: ResponsesStreamChunk): ResponseStreamEvent | null {
   try {
-    const parsed: unknown = JSON.parse(chunk.data)
-    return (
-        parsed
-          && typeof parsed === "object"
-          && "type" in parsed
-          && typeof parsed.type === "string"
-      ) ?
-        (parsed as ResponseStreamEvent)
-      : null
+    const event = readResponsesStreamEvent(chunk)
+    return typeof event?.type === "string" ? event : null
   } catch {
     return null
   }
