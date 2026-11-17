@@ -5,9 +5,13 @@ import type { ResolvedProviderConfig } from "~/lib/config"
 import { installModelsDevCatalog } from "~/lib/models-dev-cache"
 import { state } from "~/lib/state"
 import type { ResponsesPayload, ResponsesResult } from "~/lib/types/responses"
+import { encodeMessagesCompaction } from "~/routes/responses/messages-translation"
+import { COMPACTION_REPLAY_PROMPT } from "~/routes/responses/messages-translation/constants"
 import { codexResponsesDependencies } from "~/services/codex/create-responses"
 
 import { modelsDevCatalogFixture } from "./fixtures/models-dev-catalog"
+
+import { createResponsesResult } from "./fixtures/responses"
 
 let providerConfig: ResolvedProviderConfig | null = null
 
@@ -46,26 +50,6 @@ const defaultTaskTitleDependencies = { ...taskTitleDependencies }
 const originalFetch = globalThis.fetch
 
 const DB_PATH_ENV = "COPILOT_API_SQLITE_DB_PATH"
-
-const createResponsesResult = (model: string): ResponsesResult => ({
-  created_at: 0,
-  error: null,
-  id: "resp-test",
-  incomplete_details: null,
-  instructions: null,
-  metadata: null,
-  model,
-  object: "response",
-  output: [],
-  output_text: "",
-  parallel_tool_calls: false,
-  status: "completed",
-  temperature: null,
-  tool_choice: "auto",
-  tools: [],
-  top_p: null,
-  usage: null,
-})
 
 const parseJsonRequestBody = (body: unknown): unknown => {
   if (typeof body !== "string") {
@@ -1173,6 +1157,56 @@ describe("provider Responses context management", () => {
       input: "*** Begin Patch",
     })
   })
+})
+
+describe("provider Responses Messages compaction replay", () => {
+  test.each(["/v1/responses", "/openai/v1/responses"])(
+    "restores summary text after context pruning on %s",
+    async (endpoint) => {
+      responsesUtilsDependencies.isContextManagementEnabledForResponses = () =>
+        true
+      const summary =
+        "DeepSeek completed the investigation; the next action reads a file."
+      const action = {
+        type: "message",
+        role: "user",
+        content: "Review the action",
+      }
+      const response = await createApp().request(endpoint, {
+        body: JSON.stringify({
+          model: endpoint === "/v1/responses" ? "openai/gpt-test" : "gpt-test",
+          input: [
+            { role: "user", content: "Superseded history" },
+            {
+              type: "compaction",
+              id: "cmp-deepseek",
+              encrypted_content: encodeMessagesCompaction(summary),
+            },
+            action,
+          ],
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      })
+
+      expect(response.status).toBe(200)
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      const body = parseJsonRequestBody(
+        fetchMock.mock.calls[0][1]?.body,
+      ) as ResponsesPayload
+      expect(body.context_management).toEqual([
+        { type: "compaction", compact_threshold: 160000 },
+      ])
+      expect(body.input).toEqual([
+        {
+          type: "message",
+          role: "user",
+          content: `${COMPACTION_REPLAY_PROMPT}${summary}`,
+        },
+        action,
+      ])
+    },
+  )
 })
 
 describe("provider Responses reasoning transport isolation", () => {

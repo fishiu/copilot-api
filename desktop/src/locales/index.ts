@@ -1,15 +1,87 @@
 import type { ConfigFieldId, ConfigSection } from '../lib/config-fields'
 import en from './en'
 import zh from './zh'
+import type {
+  ClientErrorCode,
+  CodexClientOptions,
+} from '../../shared/client-integrations'
 
 export interface Locale {
+  clients: {
+    title: string
+    description: string
+    agent: string
+    gateway: string
+    apiKey: string
+    noAuth: string
+    keyNumber: string
+    refresh: string
+    loading: string
+    configure: string
+    update: string
+    working: string
+    open: string
+    restore: string
+    saved: string
+    restored: string
+    pluginFailed: string
+    pluginUninstallFailed: string
+    commandExit: string
+    stopped: string
+    model: string
+    fableModel: string
+    opusModel: string
+    sonnetModel: string
+    smallModel: string
+    reviewModel: string
+    clientDefault: string
+    sameModel: string
+    chooseModel: string
+    modelHint: string
+    claudeDescription: string
+    opencodeDescription: string
+    codexDescription: string
+    sandboxMode: string
+    sandboxModes: Record<CodexClientOptions['sandboxMode'], string>
+    approvalsReviewer: string
+    approvalReviewers: Record<CodexClientOptions['approvalsReviewer'], string>
+    webSearch: string
+    webSearchModes: Record<CodexClientOptions['webSearch'], string>
+    reasoningEffort: string
+    reasoningEffortHint: string
+    daemonAutoStart: string
+    defaultModeRequestUserInput: string
+    preventIdleSleep: string
+    modelSettings: string
+    permissionsSettings: string
+    searchSettings: string
+    featuresSettings: string
+    toolsSettings: string
+    pluginsSettings: string
+    connectionSettings: string
+    nativeToolSearch: string
+    agentInject: string
+    toolSearchBridge: string
+    agentContext: string
+    optionalPlugins: string
+    codexRestart: string
+    harnessDescription: string
+    harnessHint: string
+    profile: string
+    installPlugin: string
+    pluginInstalled: string
+    unconfigured: string
+    configured: string
+    outdated: string
+    error: string
+    errors: Record<ClientErrorCode, string>
+  }
   studio: {
     title: string
     description: string
     generate: string
     edit: string
     video: string
-    provider: string
     gateway: string
     model: string
     prompt: string
@@ -19,10 +91,6 @@ export interface Locale {
     size: string
     quality: string
     count: string
-    outputFormat: string
-    frameCount: string
-    frameDurationMs: string
-    gifHint: string
     auto: string
     low: string
     medium: string
@@ -48,7 +116,6 @@ export interface Locale {
     saved: string
     viewOriginal: string
     closePreview: string
-    useAsInput: string
     failed: string
     videoFailed: string
     pending: string
@@ -207,7 +274,6 @@ export interface Locale {
     serviceAddress: string
     authHeader: string
     copy: string
-    quotaUsage: string
     subscriptionQuota: string
     tabSubscriptions: string
     quotaRefreshAll: string
@@ -245,7 +311,6 @@ export interface Locale {
     quotaResetsOn: string
     quotaUnavailable: string
     quotaUsedPercent: string
-    quotaRemainingPercent: string
     providerOverview: string
     providerOverviewSummary: string
     providerOverviewManage: string
@@ -254,12 +319,10 @@ export interface Locale {
     refresh: string
     tokenUsage: string
     tokenUsageAllModels: string
-    tokenUsageCache: string
     tokenUsageCacheRead: string
     tokenUsageCacheWrite: string
     tokenUsageCacheHitRate: string
     tokenUsageCost: string
-    tokenUsageEndpoint: string
     tokenUsageAverageFirstToken: string
     tokenUsageOutputSpeed: string
     tokenUsageDuration: string
@@ -276,13 +339,11 @@ export interface Locale {
     tokenUsagePeriodThisMonth: string
     tokenUsagePeriodLast30Days: string
     tokenUsagePeriodLifetime: string
-    tokenUsageProvider: string
     tokenUsageRequests: string
     tokenUsageSession: string
     tokenUsageSessionBreakdown: string
     tokenUsageSessionsCount: string
     tokenUsageSessionsLoadFailed: string
-    tokenUsageSource: string
     tokenUsageTime: string
     tokenUsageTotal: string
     tokenUsageTotalCost: string
@@ -305,7 +366,6 @@ export interface Locale {
     stop: string
     running: string
     notStarted: string
-    logout: string
     settings: string
     appSettings: string
     advancedConfig: string
@@ -324,9 +384,6 @@ export interface Locale {
     fileQuit: string
     view: string
     viewReload: string
-    viewZoomIn: string
-    viewZoomOut: string
-    viewZoomReset: string
     help: string
     helpAbout: string
     aboutVersion: string
@@ -336,7 +393,6 @@ export interface Locale {
     bunFallback: string
     runtime: string
     spawnFailed: string
-    tokenNotFound: string
     authRequired: string
     portInUse: string
     startFailed: string
@@ -447,7 +503,6 @@ export interface Locale {
     close: string
     saveApply: string
     save: string
-    synced: string
     unsaved: string
     unsavedOther: string
     offline: string
@@ -470,26 +525,15 @@ export interface Locale {
     fields: Record<ConfigFieldId, { label: string; description: string }>
   }
   advancedConfig: {
-    title: string
-    subtitle: string
-    back: string
-    modelMappingsTitle: string
     modelMappingsDesc: string
-    scopeLabel: string
-    scopeNote: string
-    restartNote: string
-    configPath: string
     addMapping: string
+    mapCodex: string
+    mapCopilot: string
+    quickMappingsHelp: string
+    quickMappingsLoadFailed: string
     sourceModel: string
     targetModel: string
     remove: string
-    emptyTitle: string
-    emptyDescription: string
-    saveHelp: string
-    saved: string
-    loadFailed: string
-    saveFailed: string
-    serverRequired: string
     validationIncomplete: string
     validationDuplicate: string
   }

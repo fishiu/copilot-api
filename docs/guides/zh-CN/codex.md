@@ -6,15 +6,11 @@
 
 ## 与 Codex 一起使用
 
-这个 AI gateway 也可以为 Codex 提供后端能力。
+在 Codex 中添加网关地址和密钥，即可使用网关提供的模型。
 
 推荐使用 Codex `0.160.0` 或更高版本：这些客户端会从 `model_catalog_url` 加载模型目录，因此本地 `model_catalog_json` 文件是可选的。
 
-远程目录响应限制为 1 MiB JSON。合并后的目录超出该限制时，网关会优先保留通过 provider `agentsModels` 选中的模型，其余模型会被丢弃。请在 Provider 管理页选择需要的模型；如果需要完整列表，则生成本地目录文件。
-
-Codex 客户端目录始终排除仅输出图片的模型，即使 `agentsModels` 显式选择也不会展示；支持图片输入的聊天模型仍可按筛选规则展示。OpenCode 可以通过同一份名单发现仅输出图片的模型；普通聚合目录也包含图片模型，不受 `agentsModels` 限制。
-
-当 `modelMappings` 已将裸名 `model` 映射到同一个 `codex/model` 时，Codex 目录会省略重复的 `codex/model` 条目并保留裸名的完整元数据。默认的 `codex-auto-review` 和 `gpt-reserve` 映射也适用。显式前缀调用继续可用；映射到其他模型或 provider 时保留前缀条目。
+桌面端 **客户端接入 → Codex** 按 **模型**、**沙箱与审批**、**搜索** 和 **Features** 分组。选择模型后会联动更新可选思考程度，默认使用该模型支持的最高思考档位（支持时为 `max`）；`ultra` 作为独立执行模式保留为可选项。已有配置会从 `config.toml` 回显，保存前可自行修改。Features 开关在未配置时默认为 `daemon_auto_start = false`、`default_mode_request_user_input = true`、`prevent_idle_sleep = true`。
 
 ### Codex `config.toml` 参考配置
 
@@ -30,13 +26,15 @@ plan_mode_reasoning_effort = "max"
 # ChatGPT 账号登录的 Codex，输入超过 272000 token 不加收长上下文费用。
 # API Key 调用则适用独立的 OpenAI API 定价。
 model_context_window = 400000
-# 沙箱策略。可改用 "workspace-write" 以启用限制。
+# 沙箱选项："read-only"、"workspace-write"、"danger-full-access"。
 sandbox_mode = "danger-full-access"
+# 审批审核者选项："user"、"auto_review"。
 approvals_reviewer = "auto_review"
 suppress_unstable_features_warning = true
+# 网页搜索选项："disabled"、"cached"、"indexed"、"live"。
 web_search = "live"
 service_tier = "default"
-# 可选：Codex 0.160.0+ 会使用上方的远程目录。仅当需要使用由
+# 可选：Codex 0.160.0+ 使用下方配置的远程目录。仅当需要使用由
 # docs/generate-model-catalog.sh 生成的本地完整目录时，才取消下一行注释。
 # model_catalog_json = "model_catalog.json"
 
@@ -70,10 +68,12 @@ enabled-reasoning-efforts = ["low", "medium", "high", "xhigh", "ultra", "max"]
 enabled = false
 ```
 
+沙箱、审批审核者和搜索模式的含义见[官方配置参考](https://learn.chatgpt.com/docs/config-file/config-reference)。思考程度选项取决于所选模型。
+
 > [!NOTE]
 > `name` 一定要配置为 `"OpenAI"`。
 >
-> **GitHub Copilot 用户需在 `[features]` 中设置 `instant_interrupt = false`。** 这样插话会走常规 steer 路径，等待当前模型响应完成，保留 WebSocket 复用和增量续接的机会。
+> **GitHub Copilot 用户需在 `[features]` 中设置 `instant_interrupt = false`**，或在 ChatGPT Desktop 的 **Settings → General → Follow-up behavior** 中选择 **Queue**。这样插话会走常规 steer 路径，等待当前模型响应完成，保留 WebSocket 复用和增量续接的机会。
 >
 > **多 Agent 混用：** 在网关配置或桌面端高级配置中开启 [`codexMultiAgentV1`](configuration.md#codex-多-agent-兼容性)，使用 V1 明文任务消息混用 GPT 与第三方模型，避开 V2 的 GPT 原生加密消息兼容限制。默认 V2，切换后需新建会话。
 >
@@ -120,7 +120,7 @@ setx GITHUB_COPILOT_API_KEY dummy
 ```json
 {
   "modelMappings": {
-    "codex-auto-review": "gpt-5.6-luna"
+    "codex-auto-review": "gpt-6-luna"
   }
 }
 ```
@@ -144,6 +144,14 @@ sh docs/generate-model-catalog.sh
 - **更新：** 网关模型或 provider 变化后，重新运行脚本并重启 Codex。
 
 ### Codex 模型目录与协议适配
+
+远程目录响应限制为 1 MiB JSON。合并后的目录超出该限制时，网关会优先保留通过 provider `agentsModels` 选中的模型，其余模型会被丢弃。请在 Provider 管理页选择需要的模型；如果需要完整列表，则生成本地目录文件。
+
+Codex 客户端目录始终排除仅输出图片的模型，即使 `agentsModels` 显式选择也不会展示；支持图片输入的聊天模型仍可按筛选规则展示。OpenCode 可以通过同一份名单发现仅输出图片的模型；普通聚合目录也包含图片模型，不受 `agentsModels` 限制。
+
+当 `modelMappings` 已将裸名 `model` 映射到同一个 `codex/model` 时，Codex 目录会省略重复的 `codex/model` 条目并保留裸名的完整元数据。默认的 `codex-auto-review` 和 `gpt-reserve` 映射也适用。显式前缀调用继续可用；映射到其他模型或 provider 时保留前缀条目。
+
+使用 DeepSeek 等 Messages 适配模型后，自动审批可能将历史发送给 `codex-auto-review`。网关会把自身生成的压缩检查点还原为文本摘要再转发，保留审批所需的前文，避免 Codex 将摘要包装误当成原生密文而报 `invalid_encrypted_content`。此转换也适用于其他原生 Responses 模型；真正由上游加密的检查点仍原样透传。
 
 模型目录会按客户端版本适配：Codex `0.160.0` 及以上版本使用规范字段 `model_messages.instructions_template`，不再返回重复的旧字段 `base_instructions`；较旧客户端保留兼容字段。
 
