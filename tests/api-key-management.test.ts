@@ -3,7 +3,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
-test("enforces key policies, isolates usage, restores quotas and ignores retained old keys", () => {
+test.each(["default", "explicit"])("managed key policies (%s)", (source) => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "copilot-key-management-"))
   try {
     const config = {
@@ -41,10 +41,12 @@ test("enforces key policies, isolates usage, restores quotas and ignores retaine
       modelMappings: { alias: "codex/gpt-good" },
     }
     fs.writeFileSync(path.join(home, "config.json"), JSON.stringify(config))
+    const managedKeyOptions =
+      source === "explicit" ? "getApiKeys: getConfiguredApiKeys, " : ""
     const script = [
       'import { Hono } from "hono"',
       'import { traceIdMiddleware } from "./src/lib/trace.ts"',
-      'import { createAuthMiddleware, getConfiguredAdminApiKeys } from "./src/lib/request-auth.ts"',
+      'import { createAuthMiddleware, getConfiguredAdminApiKeys, getConfiguredApiKeys } from "./src/lib/request-auth.ts"',
       'import { apiKeyPolicyMiddleware } from "./src/lib/api-key-policy.ts"',
       'import { requestContext, setPluginRequestActualModel } from "./src/lib/request-context.ts"',
       'import { forwardError } from "./src/lib/error.ts"',
@@ -55,10 +57,10 @@ test("enforces key policies, isolates usage, restores quotas and ignores retaine
       "const app = new Hono()",
       "app.onError((error, c) => forwardError(c, error))",
       'app.use("*", traceIdMiddleware)',
-      'app.use("*", createAuthMiddleware({ allowUnauthenticatedPaths: [], shouldSkipPath: (path) => path.startsWith("/admin/") }))',
+      `app.use("*", createAuthMiddleware({ ${managedKeyOptions}allowUnauthenticatedPaths: [], shouldSkipPath: (path) => path.startsWith("/admin/") }))`,
       'app.use("/admin/*", createAuthMiddleware({ getApiKeys: getConfiguredAdminApiKeys, allowWhenNoApiKeys: false, allowUnauthenticatedPaths: [] }))',
       'app.use("*", apiKeyPolicyMiddleware)',
-      'app.get("/models", (c) => c.json({ data: [{ id: "alias" }, { id: "forbidden" }], object: "list" }))',
+      'app.get("/models", (c) => c.json({ data: [{ id: "alias" }, { id: "codex/not-allowed" }], object: "list" }))',
       'app.post("/responses", async (c) => {',
       '  const payload = await c.req.json(); const target = resolveMappedModel(payload.model); const parts = target.split("/");',
       '  setPluginRequestActualModel(parts.slice(1).join("/"), parts[0]);',
@@ -74,7 +76,8 @@ test("enforces key policies, isolates usage, restores quotas and ignores retaine
       'result.disabled = (await call("disabled", "/models")).status',
       'result.expired = (await call("expired", "/models")).status',
       'result.legacy = (await call("legacy-only", "/models")).status',
-      'result.forbidden = (await call("old-a", "/responses", { model: "codex/not-allowed" })).status',
+      'const forbidden = await call("old-a", "/responses", { model: "codex/not-allowed" })',
+      "result.forbidden = { status: forbidden.status, code: (await forbidden.json()).error?.code }",
       'result.models = await (await call("old-a", "/models")).json()',
       'result.unpriced = (await call("key-b", "/responses", { model: "codex/no-price" })).status',
       'result.allowed = (await call("old-a", "/responses", { model: "alias" })).status',
@@ -139,7 +142,7 @@ test("enforces key policies, isolates usage, restores quotas and ignores retaine
       disabled: number
       expired: number
       legacy: number
-      forbidden: number
+      forbidden: { status: number; code: string }
       unpriced: number
       allowed: number
       exhausted: number
@@ -181,9 +184,12 @@ test("enforces key policies, isolates usage, restores quotas and ignores retaine
     expect([result.disabled, result.expired, result.legacy]).toEqual([
       401, 401, 401,
     ])
-    expect(result.forbidden).toBe(403)
+    expect(result.forbidden).toEqual({ status: 403, code: "model_not_allowed" })
     expect(result.unpriced).toBe(403)
-    expect(result.models.data).toEqual([{ id: "alias" }])
+    expect(result.models.data).toEqual([
+      { id: "alias" },
+      { id: "codex/not-allowed" },
+    ])
     expect([result.allowed, result.exhausted, result.other]).toEqual([
       200, 429, 200,
     ])
